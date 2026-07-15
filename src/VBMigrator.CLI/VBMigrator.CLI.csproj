@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>VBMigrator.CLI</RootNamespace>
+    <AssemblyName>vbmigrator</AssemblyName>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>vbmigrator</ToolCommandName>
+    <!-- MSBuild.Locator check is satisfied: Core loads MSBuild via RegisterDefaults() at runtime -->
+    <DisableMSBuildAssemblyCopyCheck>true</DisableMSBuildAssemblyCopyCheck>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="System.CommandLine" Version="2.*" />
+    <PackageReference Include="Microsoft.Build.Locator" Version="1.*" />
+<ProjectReference Include="../../src/VBMigrator.Core/VBMigrator.Core.csproj" />
+  </ItemGroup>
+</Project>
