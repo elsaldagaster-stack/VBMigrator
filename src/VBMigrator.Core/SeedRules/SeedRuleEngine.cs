@@ -45,5 +45,28 @@ public class SeedRuleEngine
         return results;
     }
 
+    /// <summary>
+    /// Tries to convert a single node using the first matching rule.
+    /// Confidence: 0.90 by default; StringConcatRule with numeric operand → 0.70.
+    /// </summary>
+    public bool TryConvert(SyntaxNode node, SemanticModel? model,
+        out SyntaxNode? converted, out double confidence)
+    {
+        foreach (var rule in _rules)
+        {
+            if (rule.CanHandle(node, model))
+            {
+                converted = rule.Convert(node, model);
+                confidence = rule is Rules.StringConcatRule sc && sc.LastConvertHadNumericOperand
+                    ? 0.70
+                    : 0.90;
+                return true;
+            }
+        }
+        converted = null;
+        confidence = 0.0;
+        return false;
+    }
+
     public IReadOnlyList<ISeedRule> Rules => _rules;
 }
