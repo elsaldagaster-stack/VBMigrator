@@ -94,6 +94,9 @@ public static class ConvertCommandBuilder
         var vbFiles  = baseDir.GetFiles("*.vb", SearchOption.AllDirectories);
         var pipeline = PipelineFactory.Build();
 
+        if (output != null && !output.Exists)
+            output.Create();
+
         foreach (var vbFile in vbFiles)
         {
             var vbSource = await File.ReadAllTextAsync(vbFile.FullName);

@@ -6,22 +6,35 @@ namespace VBMigrator.Core.Translator;
 
 /// <summary>
 /// Applies seed rule conversions onto an ICSharpCode C# method output.
-/// ICSharpCode produces VB compatibility shims (e.g. LikeOperator.LikeString) for
-/// constructs that seed rules know how to convert to idiomatic C#. This rewriter
-/// finds those shims and replaces them with the seed rules' correct C# equivalents.
+/// ICSharpCode produces VB compatibility shims for constructs that seed rules know
+/// how to convert to idiomatic C#. This rewriter finds those shims and replaces them
+/// with the seed rules' correct C# equivalents.
+///
+/// Supported tags:
+///   like_operator  — LikeOperator.LikeString(...) → Regex.IsMatch(...)
+///   my_settings    — My.Settings.Foo              → Properties.Settings.Default.Foo
+///   my_*           — other My.X.Y patterns passed through from ICSharpCode as-is
 /// </summary>
 internal sealed class SeedRuleCsRewriter : CSharpSyntaxRewriter
 {
     // One queue per tag — dequeued in document order to handle multiple occurrences.
-    private readonly Queue<string> _likeQueue = new();
+    private readonly Queue<string> _likeQueue      = new();
+    private readonly Queue<string> _mySettingsQueue = new();
 
     public SeedRuleCsRewriter(
         IReadOnlyList<(string Tag, SyntaxNode Original, SyntaxNode Converted)> matches)
     {
         foreach (var (tag, _, converted) in matches)
         {
-            if (tag == "like_operator")
-                _likeQueue.Enqueue(converted.ToFullString());
+            switch (tag)
+            {
+                case "like_operator":
+                    _likeQueue.Enqueue(converted.ToFullString());
+                    break;
+                case "my_settings":
+                    _mySettingsQueue.Enqueue(converted.ToFullString());
+                    break;
+            }
         }
     }
 
@@ -37,7 +50,24 @@ internal sealed class SeedRuleCsRewriter : CSharpSyntaxRewriter
         return base.VisitInvocationExpression(node);
     }
 
+    public override SyntaxNode? VisitMemberAccessExpression(MemberAccessExpressionSyntax node)
+    {
+        // ICSharpCode passes My.Settings.Foo through unchanged (invalid in C#).
+        // Match the outermost My.Settings.<prop> access (expression = "My.Settings").
+        if (_mySettingsQueue.Count > 0 && IsMySettingsAccess(node))
+        {
+            return SyntaxFactory.ParseExpression(_mySettingsQueue.Dequeue())
+                .WithTriviaFrom(node);
+        }
+
+        return base.VisitMemberAccessExpression(node);
+    }
+
     private static bool IsLikeStringCall(InvocationExpressionSyntax node)
         => node.Expression is MemberAccessExpressionSyntax ma
            && ma.Name.Identifier.Text == "LikeString";
+
+    private static bool IsMySettingsAccess(MemberAccessExpressionSyntax node)
+        // Expression text is "My.Settings" — the outer .Foo is node.Name
+        => node.Expression.ToString() == "My.Settings";
 }
