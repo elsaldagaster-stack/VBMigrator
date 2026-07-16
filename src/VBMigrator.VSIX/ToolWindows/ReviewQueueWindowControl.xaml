@@ -1,0 +1,31 @@
+<UserControl x:Class="VBMigrator.VSIX.ToolWindows.ReviewQueueWindowControl"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <Grid>
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto"/>
+      <RowDefinition Height="*"/>
+      <RowDefinition Height="200"/>
+      <RowDefinition Height="Auto"/>
+    </Grid.RowDefinitions>
+
+    <TextBlock Grid.Row="0" Text="Review Queue" FontWeight="Bold" Margin="4"/>
+
+    <ListBox Grid.Row="1" x:Name="QueueList" DisplayMemberPath="MethodName"/>
+
+    <Grid Grid.Row="2">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*"/>
+        <ColumnDefinition Width="*"/>
+      </Grid.ColumnDefinitions>
+      <TextBox Grid.Column="0" x:Name="VbPanel" IsReadOnly="True" FontFamily="Consolas"/>
+      <TextBox Grid.Column="1" x:Name="CsPanel" FontFamily="Consolas" AcceptsReturn="True"/>
+    </Grid>
+
+    <StackPanel Grid.Row="3" Orientation="Horizontal">
+      <Button Content="✓ Aceptar" Click="Accept_Click" Margin="4"/>
+      <Button Content="✎ Editar y aprender" Click="EditAndLearn_Click" Margin="4"/>
+      <Button Content="✗ Manual" Click="Manual_Click" Margin="4"/>
+    </StackPanel>
+  </Grid>
+</UserControl>
