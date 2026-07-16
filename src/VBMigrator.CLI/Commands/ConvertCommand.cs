@@ -54,28 +54,37 @@ public static class ConvertCommandBuilder
         var vbSource = await File.ReadAllTextAsync(file.FullName);
         var pipeline = PipelineFactory.Build();
         var results  = await pipeline.ProcessFileAsync(vbSource, file.FullName);
-        var first    = results.FirstOrDefault();
 
-        if (first == null) return;
+        if (results.Count == 0) return;
+
+        var csSource       = string.Join("\n\n", results.Select(r => r.CsSource));
+        var confidence     = results.Min(r => r.Confidence);
+        var worstRoute     = results.Any(r => r.Route == TranslationRoute.HumanQueue)
+                                ? TranslationRoute.HumanQueue
+                                : results.Any(r => r.Route == TranslationRoute.Llm)
+                                    ? TranslationRoute.Llm
+                                    : results.First().Route;
+        var compilerPassed = results.All(r => r.CompilerPassed);
+        var compilerErrors = results.SelectMany(r => r.CompilerErrors).Distinct().ToList();
 
         if (jsonOutput)
         {
             var dto = new TranslationResultDto(
                 filePath:         file.FullName,
-                csSource:         first.CsSource,
-                confidence:       first.Confidence,
-                route:            first.Route.ToString(),
-                compilerPassed:   first.CompilerPassed,
-                compilerErrors:   first.CompilerErrors,
-                patternTag:       first.PatternTag,
-                llmFailureReason: first.LlmFailureReason?.ToString());
+                csSource:         csSource,
+                confidence:       confidence,
+                route:            worstRoute.ToString(),
+                compilerPassed:   compilerPassed,
+                compilerErrors:   compilerErrors,
+                patternTag:       results.FirstOrDefault(r => r.PatternTag != null)?.PatternTag,
+                llmFailureReason: results.FirstOrDefault(r => r.LlmFailureReason != null)?.LlmFailureReason?.ToString());
 
             Console.WriteLine(JsonSerializer.Serialize(dto, JsonOpts));
         }
         else
         {
             var outPath = Path.ChangeExtension(file.FullName, ".cs");
-            await File.WriteAllTextAsync(outPath, first.CsSource);
+            await File.WriteAllTextAsync(outPath, csSource);
         }
     }
 
