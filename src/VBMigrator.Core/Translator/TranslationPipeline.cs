@@ -75,23 +75,30 @@ public class TranslationPipeline(
                 fewShot = await correctionStore.GetFewShotAsync(tag);
         }
 
-        // Step [7a]: SeedRuleEngine on VB nodes
-        var methodVbTree  = VisualBasicSyntaxTree.ParseText(pair.VbMethodSource);
+        // Step [7a]: SeedRuleEngine — apply rules on VB method, embed results into
+        //            ICSharpCode C# output via SeedRuleCsRewriter (preserves method wrapper)
+        var methodVbRoot    = VisualBasicSyntaxTree.ParseText(pair.VbMethodSource).GetRoot();
+        var seedMatches     = seedRuleEngine.Apply(methodVbRoot);
         var nodeConfidences = new List<double>();
-        var csNodes         = new List<string>();
+        string methodCs     = pair.CsMethodSource;
 
-        foreach (var node in methodVbTree.GetRoot().DescendantNodesAndSelf())
+        if (seedMatches.Count > 0)
         {
-            if (seedRuleEngine.TryConvert(node, null, out var converted, out var confidence))
+            // Get confidence for each match (reuses TryConvert confidence logic)
+            foreach (var (_, original, _) in seedMatches)
             {
-                csNodes.Add(converted!.ToFullString());
-                nodeConfidences.Add(confidence);
+                seedRuleEngine.TryConvert(original, null, out _, out var conf);
+                nodeConfidences.Add(conf);
             }
+
+            // Replace ICSharpCode VB-compat shims with seed rule outputs
+            var csRoot   = Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree.ParseText(methodCs).GetRoot();
+            var rewriter = new SeedRuleCsRewriter(seedMatches);
+            methodCs = rewriter.Visit(csRoot).ToFullString();
         }
 
-        // Step [7b]: LLM for remaining nodes (when no seed rule matched)
-        string methodCs = pair.CsMethodSource;
-        if (llmTranslator != null && csNodes.Count == 0)
+        // Step [7b]: LLM when no seed rule matched
+        if (seedMatches.Count == 0 && llmTranslator != null)
         {
             var llmResult = await llmTranslator.TranslateAsync(pair.VbMethodSource, fewShot);
             if (llmResult.Route == TranslationRoute.HumanQueue)
@@ -104,7 +111,7 @@ public class TranslationPipeline(
         usingResolver.Resolve(methodCs, null);
 
         // Step [8]: Validate
-        var finalCs    = csNodes.Count > 0 ? string.Join("\n", csNodes) : methodCs;
+        var finalCs    = methodCs;
         var validation = await validator.ValidateAsync(finalCs);
 
         if (!validation.Success && repairAgent != null)
