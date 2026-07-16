@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<CommandTable xmlns="http://schemas.microsoft.com/VisualStudio/2005-10-18/CommandTable"
+              xmlns:xs="http://www.w3.org/2001/XMLSchema">
+
+  <Extern href="stdidcmd.h"/>
+  <Extern href="vsshlids.h"/>
+
+  <Commands package="guidVBMigratorPackage">
+
+    <Groups>
+      <!-- Group in Solution Explorer item (file) context menu -->
+      <Group guid="guidVBMigratorCmdSet" id="grpFile" priority="0x0600">
+        <Parent guid="guidSHLMainMenu" id="IDM_VS_CTXT_ITEMNODE"/>
+      </Group>
+      <!-- Group in Solution Explorer solution node context menu -->
+      <Group guid="guidVBMigratorCmdSet" id="grpSolution" priority="0x0600">
+        <Parent guid="guidSHLMainMenu" id="IDM_VS_CTXT_SOLNNODE"/>
+      </Group>
+    </Groups>
+
+    <Buttons>
+      <Button guid="guidVBMigratorCmdSet" id="cmdConvertFile" priority="0x0100" type="Button">
+        <Parent guid="guidVBMigratorCmdSet" id="grpFile"/>
+        <Strings>
+          <ButtonText>Convert to C# (VBMigrator)</ButtonText>
+        </Strings>
+      </Button>
+      <Button guid="guidVBMigratorCmdSet" id="cmdConvertSolution" priority="0x0100" type="Button">
+        <Parent guid="guidVBMigratorCmdSet" id="grpSolution"/>
+        <Strings>
+          <ButtonText>Convert Solution to C# (VBMigrator)</ButtonText>
+        </Strings>
+      </Button>
+    </Buttons>
+
+  </Commands>
+
+  <Symbols>
+    <GuidSymbol name="guidVBMigratorPackage"
+                value="{a1b2c3d4-e5f6-7890-abcd-ef1234567890}" />
+    <GuidSymbol name="guidVBMigratorCmdSet"
+                value="{b1c2d3e4-f5a6-7890-bcde-f01234567891}">
+      <IDSymbol name="grpFile"            value="0x1020" />
+      <IDSymbol name="grpSolution"        value="0x1021" />
+      <IDSymbol name="cmdConvertFile"     value="0x0100" />
+      <IDSymbol name="cmdConvertSolution" value="0x0102" />
+    </GuidSymbol>
+  </Symbols>
+
+</CommandTable>

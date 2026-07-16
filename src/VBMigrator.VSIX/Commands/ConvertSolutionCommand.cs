@@ -28,18 +28,30 @@ public sealed class ConvertSolutionCommand
 
     private async void Execute(object sender, EventArgs e)
     {
-        await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
-        var dte = await _package.GetServiceAsync(typeof(EnvDTE.DTE)) as EnvDTE.DTE;
-        var slnPath = dte?.Solution?.FullName;
-        if (slnPath == null) return;
+        try
+        {
+            await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+            var dte = await _package.GetServiceAsync(typeof(EnvDTE.DTE)) as EnvDTE.DTE;
+            var slnPath = dte?.Solution?.FullName;
+            if (slnPath == null) return;
 
-        var runner = new CliRunner();
-        var exitCode = await runner.ConvertSolutionAsync(
-            slnPath, outputDir: null,
-            onProgress: line => System.Diagnostics.Debug.WriteLine($"[VBMigrator] {line}"));
+            var runner = new CliRunner();
+            var exitCode = await runner.ConvertSolutionAsync(
+                slnPath, outputDir: null,
+                onProgress: line => System.Diagnostics.Debug.WriteLine($"[VBMigrator] {line}"));
 
-        if (exitCode == 0)
-            await _package.ShowToolWindowAsync(
-                typeof(ToolWindows.ReviewQueueWindow), 0, true, _package.DisposalToken);
+            if (exitCode == 0)
+                await _package.ShowToolWindowAsync(
+                    typeof(ToolWindows.ReviewQueueWindow), 0, true, _package.DisposalToken);
+        }
+        catch (Exception ex)
+        {
+            await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+            System.Windows.MessageBox.Show(
+                $"VBMigrator error: {ex.Message}",
+                "VBMigrator",
+                System.Windows.MessageBoxButton.OK,
+                System.Windows.MessageBoxImage.Error);
+        }
     }
 }

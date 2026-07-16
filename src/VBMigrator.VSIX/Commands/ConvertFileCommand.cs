@@ -30,26 +30,38 @@ public sealed class ConvertFileCommand
 
     private async void Execute(object sender, EventArgs e)
     {
-        await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
-        var dte = await _package.GetServiceAsync(typeof(EnvDTE.DTE)) as EnvDTE.DTE;
-        var selectedItem = dte?.SelectedItems?.Item(1)?.ProjectItem;
-        var filePath = selectedItem?.FileNames[1];
-        if (filePath == null || !filePath.EndsWith(".vb", StringComparison.OrdinalIgnoreCase))
-            return;
-
-        var runner = new CliRunner();
-        var result = await runner.ConvertFileAsync(filePath);
-        if (result == null) return;
-
-        if (result.Route == "HumanQueue")
+        try
         {
-            await _package.ShowToolWindowAsync(
-                typeof(ToolWindows.ReviewQueueWindow), 0, true, _package.DisposalToken);
+            await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+            var dte = await _package.GetServiceAsync(typeof(EnvDTE.DTE)) as EnvDTE.DTE;
+            var selectedItem = dte?.SelectedItems?.Item(1)?.ProjectItem;
+            var filePath = selectedItem?.FileNames[1];
+            if (filePath == null || !filePath.EndsWith(".vb", StringComparison.OrdinalIgnoreCase))
+                return;
+
+            var runner = new CliRunner();
+            var result = await runner.ConvertFileAsync(filePath);
+            if (result == null) return;
+
+            if (result.Route == "HumanQueue")
+            {
+                await _package.ShowToolWindowAsync(
+                    typeof(ToolWindows.ReviewQueueWindow), 0, true, _package.DisposalToken);
+            }
+            else
+            {
+                var csPath = Path.ChangeExtension(filePath, ".cs");
+                await Task.Run(() => File.WriteAllText(csPath, result.CsSource));
+            }
         }
-        else
+        catch (Exception ex)
         {
-            var csPath = Path.ChangeExtension(filePath, ".cs");
-            await Task.Run(() => File.WriteAllText(csPath, result.CsSource));
+            await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+            System.Windows.MessageBox.Show(
+                $"VBMigrator error: {ex.Message}",
+                "VBMigrator",
+                System.Windows.MessageBoxButton.OK,
+                System.Windows.MessageBoxImage.Error);
         }
     }
 }
