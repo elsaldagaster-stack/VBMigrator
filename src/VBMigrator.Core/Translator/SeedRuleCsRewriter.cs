@@ -20,6 +20,7 @@ internal sealed class SeedRuleCsRewriter : CSharpSyntaxRewriter
     // One queue per tag — dequeued in document order to handle multiple occurrences.
     private readonly Queue<string> _likeQueue      = new();
     private readonly Queue<string> _mySettingsQueue = new();
+    private readonly Queue<string> _iifQueue        = new();
 
     public SeedRuleCsRewriter(
         IReadOnlyList<(string Tag, SyntaxNode Original, SyntaxNode Converted)> matches)
@@ -34,6 +35,9 @@ internal sealed class SeedRuleCsRewriter : CSharpSyntaxRewriter
                 case "my_settings":
                     _mySettingsQueue.Enqueue(converted.ToFullString());
                     break;
+                case "iif_function":
+                    _iifQueue.Enqueue(converted.ToFullString());
+                    break;
             }
         }
     }
@@ -44,6 +48,13 @@ internal sealed class SeedRuleCsRewriter : CSharpSyntaxRewriter
         if (_likeQueue.Count > 0 && IsLikeStringCall(node))
         {
             return SyntaxFactory.ParseExpression(_likeQueue.Dequeue())
+                .WithTriviaFrom(node);
+        }
+
+        // ICSharpCode passes IIf(cond, a, b) through unchanged — seed rule converts to ternary
+        if (_iifQueue.Count > 0 && IsIifCall(node))
+        {
+            return SyntaxFactory.ParseExpression(_iifQueue.Dequeue())
                 .WithTriviaFrom(node);
         }
 
@@ -66,6 +77,11 @@ internal sealed class SeedRuleCsRewriter : CSharpSyntaxRewriter
     private static bool IsLikeStringCall(InvocationExpressionSyntax node)
         => node.Expression is MemberAccessExpressionSyntax ma
            && ma.Name.Identifier.Text == "LikeString";
+
+    private static bool IsIifCall(InvocationExpressionSyntax node)
+        => node.Expression is IdentifierNameSyntax id
+           && string.Equals(id.Identifier.Text, "IIf", StringComparison.OrdinalIgnoreCase)
+           && node.ArgumentList?.Arguments.Count == 3;
 
     private static bool IsMySettingsAccess(MemberAccessExpressionSyntax node)
         // Expression text is "My.Settings" — the outer .Foo is node.Name

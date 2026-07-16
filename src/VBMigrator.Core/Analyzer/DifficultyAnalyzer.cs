@@ -50,10 +50,11 @@ public class DifficultyAnalyzer
         if (LateBindingDetector.HasLateBinding(methodNode, semanticModel))
             flags.Add(LateBindingDetector.Flag);
 
-        var (likeOp, exponOp, byteLoop) = OperatorDetector.Detect(methodNode);
+        var (likeOp, exponOp, byteLoop, iifOp) = OperatorDetector.Detect(methodNode);
         if (likeOp)   flags.Add(OperatorDetector.FlagLikeOp);
         if (exponOp)  flags.Add(OperatorDetector.FlagExponOp);
         if (byteLoop) flags.Add(OperatorDetector.FlagByteLoop);
+        if (iifOp)    flags.Add(OperatorDetector.FlagIifOp);
 
         int score = Math.Min(100, flags.Count * 10);
         var route = DetermineRoute(flags);

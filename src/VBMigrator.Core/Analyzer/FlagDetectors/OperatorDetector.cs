@@ -5,15 +5,16 @@ using Microsoft.CodeAnalysis.VisualBasic.Syntax;
 namespace VBMigrator.Core.Analyzer.FlagDetectors;
 
 /// <summary>
-/// Detects VB-specific operators: Like, ^ exponentiation, Byte loop overflow.
+/// Detects VB-specific operators: Like, ^ exponentiation, Byte loop overflow, IIf calls.
 /// </summary>
 public static class OperatorDetector
 {
     public const string FlagLikeOp   = "LikeOp";
     public const string FlagExponOp  = "ExponOp";
     public const string FlagByteLoop = "ByteLoop";
+    public const string FlagIifOp    = "IifOp";
 
-    public static (bool LikeOp, bool ExponOp, bool ByteLoop) Detect(SyntaxNode methodNode)
+    public static (bool LikeOp, bool ExponOp, bool ByteLoop, bool IifOp) Detect(SyntaxNode methodNode)
     {
         var nodes = methodNode.DescendantNodes().ToList();
 
@@ -26,7 +27,11 @@ public static class OperatorDetector
                           string.Equals(a.Type?.ToString().Trim(), "Byte", StringComparison.OrdinalIgnoreCase);
             return isByte && f.ToValue?.ToString().Trim() == "255";
         });
+        bool iifOp = nodes.OfType<InvocationExpressionSyntax>().Any(inv =>
+            inv.Expression is IdentifierNameSyntax id &&
+            string.Equals(id.Identifier.Text, "IIf", StringComparison.OrdinalIgnoreCase) &&
+            inv.ArgumentList?.Arguments.Count == 3);
 
-        return (likeOp, exponOp, byteLoop);
+        return (likeOp, exponOp, byteLoop, iifOp);
     }
 }

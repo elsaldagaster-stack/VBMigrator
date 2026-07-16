@@ -28,7 +28,8 @@ public class TranslationPipeline(
         ["LikeOp"]        = "like_operator",
         ["ExponOp"]       = "exponentiation",
         ["ByteLoop"]      = "for_byte_overflow",
-        ["MyNamespace"]   = "my_settings"
+        ["MyNamespace"]   = "my_settings",
+        ["IifOp"]         = "iif_function"
     };
 
     public async Task<IReadOnlyList<TranslationResult>> ProcessFileAsync(string vbSource, string filePath)
