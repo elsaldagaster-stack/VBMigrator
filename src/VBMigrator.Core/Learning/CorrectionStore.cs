@@ -4,6 +4,8 @@ using System.Reflection;
 
 namespace VBMigrator.Core.Learning;
 
+public record PatternStat(string Tag, int TotalPatterns, double? SuccessRate);
+
 public class CorrectionStore(string dbPath)
 {
     public async Task InitializeAsync()
@@ -59,6 +61,21 @@ public class CorrectionStore(string dbPath)
 
     public virtual Task StoreAsync(string tag, string vbTemplate, string csTemplate)
         => SaveCorrectionAsync(vbTemplate, csTemplate, tag);
+
+    public async Task<IReadOnlyList<PatternStat>> GetStatsAsync()
+    {
+        using var conn = OpenConnection();
+        using var cmd  = conn.CreateCommand();
+        cmd.CommandText = "SELECT tag, total_patterns, success_rate FROM pattern_stats ORDER BY tag";
+        var result = new List<PatternStat>();
+        using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+            result.Add(new PatternStat(
+                reader.GetString(0),
+                reader.GetInt32(1),
+                reader.IsDBNull(2) ? null : reader.GetDouble(2)));
+        return result;
+    }
 
     private SqliteConnection OpenConnection()
     {
