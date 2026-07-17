@@ -12,30 +12,74 @@ public class LlmUsingResolver
 {
     private static readonly Dictionary<string, string> _wellKnown = new(StringComparer.Ordinal)
     {
-        ["WindowsIdentity"]       = "System.Security.Principal",
-        ["Regex"]                 = "System.Text.RegularExpressions",
-        ["Assembly"]              = "System.Reflection",
+        // System
         ["DateTime"]              = "System",
         ["StringComparison"]      = "System",
         ["Math"]                  = "System",
+        ["Convert"]               = "System",
+        ["Environment"]           = "System",
+        ["GC"]                    = "System",
+        // System.IO
         ["File"]                  = "System.IO",
         ["Path"]                  = "System.IO",
         ["Directory"]             = "System.IO",
-        ["StringBuilder"]         = "System.Text",
-        ["Encoding"]              = "System.Text",
         ["Stream"]                = "System.IO",
         ["StreamReader"]          = "System.IO",
         ["StreamWriter"]          = "System.IO",
+        // System.Text
+        ["StringBuilder"]         = "System.Text",
+        ["Encoding"]              = "System.Text",
+        // System.Text.RegularExpressions
+        ["Regex"]                 = "System.Text.RegularExpressions",
+        ["Match"]                 = "System.Text.RegularExpressions",
+        // System.Collections.Generic
         ["List"]                  = "System.Collections.Generic",
         ["Dictionary"]            = "System.Collections.Generic",
         ["IEnumerable"]           = "System.Collections.Generic",
+        ["HashSet"]               = "System.Collections.Generic",
+        // System.Threading
         ["Task"]                  = "System.Threading.Tasks",
         ["CancellationToken"]     = "System.Threading",
+        // System.Net.Http
         ["HttpClient"]            = "System.Net.Http",
+        // System.Text.Json
         ["JsonSerializer"]        = "System.Text.Json",
         ["JsonSerializerOptions"] = "System.Text.Json",
+        // System.Xml.Linq
         ["XDocument"]             = "System.Xml.Linq",
         ["XElement"]              = "System.Xml.Linq",
+        // System.Reflection
+        ["Assembly"]              = "System.Reflection",
+        // System.Security
+        ["WindowsIdentity"]       = "System.Security.Principal",
+        ["SHA256"]                = "System.Security.Cryptography",
+        ["MD5"]                   = "System.Security.Cryptography",
+        ["SHA512"]                = "System.Security.Cryptography",
+        // System.Data
+        ["DataTable"]             = "System.Data",
+        ["DataRow"]               = "System.Data",
+        ["DataColumn"]            = "System.Data",
+        ["DataSet"]               = "System.Data",
+        ["DataView"]              = "System.Data",
+        ["DBNull"]                = "System.Data",
+        // System.Data.SqlClient
+        ["SqlConnection"]         = "System.Data.SqlClient",
+        ["SqlCommand"]            = "System.Data.SqlClient",
+        ["SqlDataReader"]         = "System.Data.SqlClient",
+        ["SqlDataAdapter"]        = "System.Data.SqlClient",
+        ["SqlParameter"]          = "System.Data.SqlClient",
+        ["SqlException"]          = "System.Data.SqlClient",
+        // System.Web (ASP.NET WebForms)
+        ["HttpContext"]           = "System.Web",
+        ["HttpResponse"]          = "System.Web",
+        ["HttpRequest"]           = "System.Web",
+        ["HttpServerUtility"]     = "System.Web",
+        ["HttpCookie"]            = "System.Web",
+        // System.Configuration
+        ["ConfigurationManager"]  = "System.Configuration",
+        // System.Globalization
+        ["CultureInfo"]           = "System.Globalization",
+        ["NumberStyles"]          = "System.Globalization",
     };
 
     public const string MissingUsingFlag = "MISSING_USING";

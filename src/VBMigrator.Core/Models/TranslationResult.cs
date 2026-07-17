@@ -9,4 +9,5 @@ public record TranslationResult
     public List<string> CompilerErrors { get; init; } = new();
     public string? PatternTag { get; init; }
     public LlmFailureReason? LlmFailureReason { get; init; }
+    public List<string> ResolvedNamespaces { get; init; } = new();
 }

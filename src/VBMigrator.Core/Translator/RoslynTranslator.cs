@@ -48,12 +48,23 @@ public class RoslynTranslator
     private static IReadOnlyCollection<PortableExecutableReference> GetDefaultReferences()
     {
         var trusted = System.Runtime.InteropServices.RuntimeEnvironment.GetRuntimeDirectory();
-        return new[]
+        var refs = new List<PortableExecutableReference>
         {
             MetadataReference.CreateFromFile(typeof(object).Assembly.Location),
             MetadataReference.CreateFromFile(Path.Combine(trusted, "System.Runtime.dll")),
             MetadataReference.CreateFromFile(Path.Combine(trusted, "System.Collections.dll")),
+            // System.Data types (DataTable, DataRow, DataColumn, etc.)
+            MetadataReference.CreateFromFile(typeof(System.Data.DataTable).Assembly.Location),
+            // System.Web types (Page, Control, etc.) for ASPX code-behind
+            MetadataReference.CreateFromFile(Path.Combine(trusted, "System.dll")),
         };
+
+        // System.Data.SqlClient — try runtime dir first, then skip if missing
+        var sqlClientPath = Path.Combine(trusted, "System.Data.SqlClient.dll");
+        if (File.Exists(sqlClientPath))
+            refs.Add(MetadataReference.CreateFromFile(sqlClientPath));
+
+        return refs;
     }
 }
 

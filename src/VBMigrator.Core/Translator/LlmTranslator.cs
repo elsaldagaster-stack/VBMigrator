@@ -19,22 +19,53 @@ public class AnthropicClientAdapter(AnthropicClient inner) : IAnthropicClient
 public class LlmTranslator(IAnthropicClient client, string? apiKey,
     int retryCount = 2, int retryBaseDelayMs = 1000)
 {
-    private static readonly string _systemPrompt = File.Exists("Translator/Prompts/SystemPrompt.md")
-        ? File.ReadAllText("Translator/Prompts/SystemPrompt.md")
-        : "Traduce este VB.NET snippet a C#. Devuelve solo el código, sin using statements ni explicación.";
+    private const string SystemPrompt =
+        "You are a VB.NET to C# migration specialist. " +
+        "Return ONLY the corrected C# method body. " +
+        "No class declaration, no using statements, no explanations, no markdown fences.";
 
-    public async Task<TranslationResult> TranslateAsync(string vbSource, string? fewShotExample)
+    /// <summary>
+    /// Targeted surgical fix: LLM receives the specific flag that triggered it,
+    /// the ICSharpCode baseline attempt, and the original VB method.
+    /// This makes the LLM a fixer, not a blind re-translator.
+    /// </summary>
+    public async Task<TranslationResult> TranslateAsync(
+        string vbMethod,
+        string? csBaseline,
+        string? flagHint,
+        string? fewShotExample = null)
     {
-        var userContent = fewShotExample is null
-            ? $"```vb\n{vbSource}\n```"
-            : $"Ejemplo:\nVB: {fewShotExample}\n\n```vb\n{vbSource}\n```";
+        var sb = new System.Text.StringBuilder();
+
+        if (flagHint != null)
+            sb.AppendLine($"PATTERN TO FIX: {flagHint}");
+
+        if (fewShotExample != null)
+            sb.AppendLine($"EXAMPLE:\n{fewShotExample}\n");
+
+        sb.AppendLine("VB.NET original:");
+        sb.AppendLine("```vb");
+        sb.AppendLine(vbMethod);
+        sb.AppendLine("```");
+
+        if (!string.IsNullOrWhiteSpace(csBaseline))
+        {
+            sb.AppendLine();
+            sb.AppendLine("ICSharpCode translation (fix this, do not re-translate from scratch):");
+            sb.AppendLine("```cs");
+            sb.AppendLine(csBaseline);
+            sb.AppendLine("```");
+        }
+
+        sb.AppendLine();
+        sb.AppendLine("Return ONLY the corrected C# method. No class wrapper, no using statements.");
 
         var parameters = new MessageParameters
         {
-            Model          = "claude-sonnet-4-6",
-            MaxTokens      = 2048,
-            SystemMessage  = _systemPrompt,
-            Messages       = [new Message(RoleType.User, userContent)]
+            Model         = "claude-sonnet-4-6",
+            MaxTokens     = 2048,
+            SystemMessage = SystemPrompt,
+            Messages      = [new Message(RoleType.User, sb.ToString())]
         };
 
         LlmFailureReason? failureReason = null;
@@ -82,30 +113,18 @@ public class LlmTranslator(IAnthropicClient client, string? apiKey,
         };
     }
 
-    // Extract C# from LLM response — handles bare code, ```csharp fences, multiple blocks
     private static string ExtractCode(string text)
     {
         text = text.Trim();
         if (!text.Contains("```")) return text;
 
-        // Collect all content inside ```...``` blocks
         var parts  = new System.Text.StringBuilder();
-        var lines  = text.Split('\n');
         bool inside = false;
-        foreach (var line in lines)
+        foreach (var line in text.Split('\n'))
         {
             var trimmed = line.TrimStart();
-            if (!inside && trimmed.StartsWith("```"))
-            {
-                inside = true;
-                continue;
-            }
-            if (inside && trimmed.StartsWith("```"))
-            {
-                inside = false;
-                parts.AppendLine();
-                continue;
-            }
+            if (!inside && trimmed.StartsWith("```")) { inside = true; continue; }
+            if (inside  && trimmed.StartsWith("```")) { inside = false; parts.AppendLine(); continue; }
             if (inside) parts.AppendLine(line);
         }
 

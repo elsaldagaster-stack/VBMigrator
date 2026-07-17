@@ -99,12 +99,38 @@ public class TranslationPipeline(
             .OfType<Microsoft.CodeAnalysis.CSharp.Syntax.TypeDeclarationSyntax>()
             .FirstOrDefault();
 
+        // Collect extra namespaces from resolver results not already in initialCs
+        var extraUsings = methodResults
+            .SelectMany(r => r.ResolvedNamespaces)
+            .Distinct(StringComparer.Ordinal)
+            .Where(ns => !initialCs.Contains($"using {ns};"))
+            .OrderBy(ns => ns)
+            .Select(ns => $"using {ns};")
+            .ToList();
+
         string assembled;
         if (typeDecl != null)
         {
+            // Header: usings + class declaration up to and including '{'
             var header = initialCs[..typeDecl.OpenBraceToken.Span.End];
             var sb = new System.Text.StringBuilder();
+            // Prepend extra using directives not in ICSharpCode output
+            foreach (var u in extraUsings)
+                sb.AppendLine(u);
             sb.AppendLine(header);
+
+            // Preserve non-method members (properties, fields, constants) from initialCs
+            foreach (var member in typeDecl.Members)
+            {
+                if (member is Microsoft.CodeAnalysis.CSharp.Syntax.MethodDeclarationSyntax
+                           or Microsoft.CodeAnalysis.CSharp.Syntax.ConstructorDeclarationSyntax)
+                    continue;
+                foreach (var line in member.ToFullString().Trim().Split('\n'))
+                    sb.AppendLine("    " + line.TrimEnd('\r'));
+                sb.AppendLine();
+            }
+
+            // Append processed method results
             foreach (var r in methodResults)
             {
                 foreach (var line in r.CsSource.Trim().Split('\n'))
@@ -145,13 +171,11 @@ public class TranslationPipeline(
         }
 
         // Step [6]: DB lookup via flag→tag mapping
+        var primaryFlag = funcDiff.Flags.First();
+        _flagToTag.TryGetValue(primaryFlag, out var flagTag);
         string? fewShot = null;
-        if (correctionStore != null)
-        {
-            var primaryFlag = funcDiff.Flags.First();
-            if (_flagToTag.TryGetValue(primaryFlag, out var tag))
-                fewShot = await correctionStore.GetFewShotAsync(tag);
-        }
+        if (correctionStore != null && flagTag != null)
+            fewShot = await correctionStore.GetFewShotAsync(flagTag);
 
         // Step [7a]: SeedRuleEngine — apply rules on VB method, embed results into
         //            ICSharpCode C# output via SeedRuleCsRewriter (preserves method wrapper)
@@ -162,25 +186,29 @@ public class TranslationPipeline(
 
         if (seedMatches.Count > 0)
         {
-            // Get confidence for each match (reuses TryConvert confidence logic)
             foreach (var (_, original, _) in seedMatches)
             {
                 seedRuleEngine.TryConvert(original, null, out _, out var conf);
                 nodeConfidences.Add(conf);
             }
 
-            // Replace ICSharpCode VB-compat shims with seed rule outputs
             var csRoot   = Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree.ParseText(methodCs).GetRoot();
             var rewriter = new SeedRuleCsRewriter(seedMatches);
             methodCs = rewriter.Visit(csRoot).ToFullString();
         }
 
-        // Step [7b]: LLM when no seed rule matched
+        // Step [7b]: LLM surgical fixer — passes flag + ICSharpCode baseline so LLM
+        //            corrects specific patterns instead of re-translating from scratch
         if (seedMatches.Count == 0)
         {
             if (llmTranslator != null)
             {
-                var llmResult = await llmTranslator.TranslateAsync(pair.VbMethodSource, fewShot);
+                var llmResult = await llmTranslator.TranslateAsync(
+                    pair.VbMethodSource,
+                    csBaseline: pair.CsMethodSource,
+                    flagHint:   flagTag ?? primaryFlag,
+                    fewShotExample: fewShot);
+
                 if (llmResult.Route != TranslationRoute.HumanQueue)
                 {
                     methodCs = llmResult.CsSource;
@@ -188,19 +216,17 @@ public class TranslationPipeline(
                 }
                 else
                 {
-                    // LLM failed/sent to queue — keep ICSharpCode output with low baseline
                     nodeConfidences.Add(0.40);
                 }
             }
             else
             {
-                // No LLM configured — keep ICSharpCode output with low baseline
                 nodeConfidences.Add(0.50);
             }
         }
 
-        // Step [7c]: LlmUsingResolver on complete method C#
-        usingResolver.Resolve(methodCs, null);
+        // Step [7c]: LlmUsingResolver — collect needed namespaces from method C#
+        var resolution = usingResolver.Resolve(methodCs, null);
 
         // Validation and scoring happen at file level after ReassembleFile
         var confidence = ConfidenceScorer.Score(nodeConfidences);
@@ -208,10 +234,11 @@ public class TranslationPipeline(
 
         return new TranslationResult
         {
-            CsSource       = methodCs,
-            Confidence     = confidence,
-            Route          = route,
-            CompilerPassed = false  // set at file level after assembly + validation
+            CsSource          = methodCs,
+            Confidence        = confidence,
+            Route             = route,
+            CompilerPassed    = false,  // set at file level after assembly + validation
+            ResolvedNamespaces = resolution.Namespaces
         };
     }
 
