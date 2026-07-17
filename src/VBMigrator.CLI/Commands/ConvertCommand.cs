@@ -139,36 +139,43 @@ public static class ConvertCommandBuilder
 
         foreach (var vbFile in vbFiles)
         {
-            var vbSource = await File.ReadAllTextAsync(vbFile.FullName);
-            var results  = await pipeline.ProcessFileAsync(vbSource, vbFile.FullName);
-
-            var csSource       = string.Join("\n\n", results.Select(r => r.CsSource));
-            var confidence     = results.Count > 0 ? results.Min(r => r.Confidence) : 0.0;
-            var route          = results.Any(r => r.Route == TranslationRoute.HumanQueue) ? "HumanQueue"
-                               : results.Any(r => r.Route == TranslationRoute.Llm)        ? "Llm"
-                               : "SeedRule";
-            var compilerPassed = results.All(r => r.CompilerPassed);
-            var tag            = results.FirstOrDefault(r => r.PatternTag != null)?.PatternTag;
-            var status         = route == "HumanQueue" ? "HUMAN_QUEUE" : "OK";
-
-            Console.Error.WriteLine($"FILE: {vbFile.Name} {status}");
-
-            await store.WriteFileResultAsync(
-                vbFile.FullName, vbSource, csSource,
-                confidence, route, compilerPassed, tag);
-
-            if (!dryRun)
+            try
             {
-                var outPath = output != null
-                    ? Path.Combine(output.FullName, Path.ChangeExtension(vbFile.Name, ".cs"))
-                    : Path.ChangeExtension(vbFile.FullName, ".cs");
-                await File.WriteAllTextAsync(outPath, csSource);
+                var vbSource = await File.ReadAllTextAsync(vbFile.FullName);
+                var results  = await pipeline.ProcessFileAsync(vbSource, vbFile.FullName);
 
-                if (replace)
+                var csSource       = string.Join("\n\n", results.Select(r => r.CsSource));
+                var confidence     = results.Count > 0 ? results.Min(r => r.Confidence) : 0.0;
+                var route          = results.Any(r => r.Route == TranslationRoute.HumanQueue) ? "HumanQueue"
+                                   : results.Any(r => r.Route == TranslationRoute.Llm)        ? "Llm"
+                                   : "SeedRule";
+                var compilerPassed = results.All(r => r.CompilerPassed);
+                var tag            = results.FirstOrDefault(r => r.PatternTag != null)?.PatternTag;
+                var status         = route == "HumanQueue" ? "HUMAN_QUEUE" : "OK";
+
+                Console.Error.WriteLine($"FILE: {vbFile.Name} {status}");
+
+                await store.WriteFileResultAsync(
+                    vbFile.FullName, vbSource, csSource,
+                    confidence, route, compilerPassed, tag);
+
+                if (!dryRun)
                 {
-                    File.Delete(vbFile.FullName);
-                    Console.Error.WriteLine($"DELETED: {vbFile.Name}");
+                    var outPath = output != null
+                        ? Path.Combine(output.FullName, Path.ChangeExtension(vbFile.Name, ".cs"))
+                        : Path.ChangeExtension(vbFile.FullName, ".cs");
+                    await File.WriteAllTextAsync(outPath, csSource);
+
+                    if (replace)
+                    {
+                        File.Delete(vbFile.FullName);
+                        Console.Error.WriteLine($"DELETED: {vbFile.Name}");
+                    }
                 }
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"FILE: {vbFile.Name} ERROR — {ex.Message}");
             }
         }
 
