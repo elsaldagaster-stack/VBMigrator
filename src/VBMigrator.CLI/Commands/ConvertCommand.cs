@@ -26,11 +26,13 @@ public static class ConvertCommandBuilder
         var jsonOpt      = new Option<bool>("--json-output")     { Description = "Emit JSON to stdout (--file mode only)" };
         var dryRunOpt    = new Option<bool>("--dry-run")         { Description = "Report only, do not write files" };
         var reportOpt    = new Option<FileInfo?>("--report")     { Description = "Report HTML output path" };
+        var folderOpt    = new Option<DirectoryInfo?>("--folder")  { Description = "Folder to convert all .vb files (Web Site projects, no .sln needed)" };
         var replaceOpt   = new Option<bool>("--replace")         { Description = "Delete .vb/.vbproj after conversion" };
         var backupDirOpt = new Option<DirectoryInfo?>("--backup-dir") { Description = "Backup original files here before replacing" };
 
         cmd.Add(fileOpt);
         cmd.Add(solutionOpt);
+        cmd.Add(folderOpt);
         cmd.Add(outputOpt);
         cmd.Add(jsonOpt);
         cmd.Add(dryRunOpt);
@@ -42,6 +44,7 @@ public static class ConvertCommandBuilder
         {
             var file       = pr.GetValue(fileOpt);
             var solution   = pr.GetValue(solutionOpt);
+            var folder     = pr.GetValue(folderOpt);
             var output     = pr.GetValue(outputOpt);
             var jsonOutput = pr.GetValue(jsonOpt);
             var dryRun     = pr.GetValue(dryRunOpt);
@@ -52,6 +55,8 @@ public static class ConvertCommandBuilder
                 await ConvertFile(file, jsonOutput);
             else if (solution != null)
                 await ConvertSolution(solution, output, dryRun, replace, backupDir);
+            else if (folder != null)
+                await ConvertDirectory(folder, output, dryRun, replace, backupDir);
         });
 
         return cmd;
@@ -96,12 +101,19 @@ public static class ConvertCommandBuilder
         }
     }
 
-    private static async Task ConvertSolution(
+    private static Task ConvertSolution(
         FileInfo sln, DirectoryInfo? output, bool dryRun,
         bool replace = false, DirectoryInfo? backupDir = null)
+        => ConvertDirectory(sln.Directory!, output, dryRun, replace, backupDir);
+
+    private static async Task ConvertDirectory(
+        DirectoryInfo baseDir, DirectoryInfo? output, bool dryRun,
+        bool replace = false, DirectoryInfo? backupDir = null)
     {
-        var baseDir  = sln.Directory!;
-        var vbFiles  = baseDir.GetFiles("*.vb", SearchOption.AllDirectories);
+        var backupPrefix = Path.Combine(baseDir.FullName, "_vbmigrator_backup");
+        var vbFiles  = baseDir.GetFiles("*.vb", SearchOption.AllDirectories)
+            .Where(f => !f.FullName.StartsWith(backupPrefix, StringComparison.OrdinalIgnoreCase))
+            .ToArray();
         var pipeline = PipelineFactory.Build();
         var store    = new TranslationLogStore();
         await store.InitializeAsync();
@@ -109,14 +121,19 @@ public static class ConvertCommandBuilder
         if (output != null && !output.Exists)
             output.Create();
 
-        // Backup originals before any modification
+        // Backup originals before any modification (preserve relative paths, skip locked files)
         if (replace && backupDir != null && !dryRun)
         {
-            Directory.CreateDirectory(backupDir.FullName);
-            foreach (var f in vbFiles)
-                File.Copy(f.FullName, Path.Combine(backupDir.FullName, f.Name), overwrite: true);
-            foreach (var f in baseDir.GetFiles("*.vbproj", SearchOption.AllDirectories))
-                File.Copy(f.FullName, Path.Combine(backupDir.FullName, f.Name), overwrite: true);
+            var allToBackup = vbFiles.Cast<FileInfo>()
+                .Concat(baseDir.GetFiles("*.vbproj", SearchOption.AllDirectories));
+            foreach (var f in allToBackup)
+            {
+                var rel      = Path.GetRelativePath(baseDir.FullName, f.FullName);
+                var destPath = Path.Combine(backupDir.FullName, rel);
+                Directory.CreateDirectory(Path.GetDirectoryName(destPath)!);
+                try   { File.Copy(f.FullName, destPath, overwrite: true); }
+                catch (IOException) { Console.Error.WriteLine($"BACKUP_SKIP: {f.Name} (locked)"); }
+            }
             Console.Error.WriteLine($"BACKUP: {backupDir.FullName}");
         }
 

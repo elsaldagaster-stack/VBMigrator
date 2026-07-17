@@ -60,7 +60,8 @@ public sealed class ConvertFileCommand
             else if (!filePath.EndsWith(".vb", StringComparison.OrdinalIgnoreCase))
                 return;
 
-            var runner = new CliRunner();
+            var opts   = (Options.VBMigratorOptions)_package.GetDialogPage(typeof(Options.VBMigratorOptions));
+            var runner = new CliRunner(opts.EffectiveApiKey);
             var result = await runner.ConvertFileAsync(filePath);
             if (result == null) return;
 

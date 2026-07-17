@@ -99,13 +99,27 @@ public class TranslationPipeline(
         }
 
         // Step [7b]: LLM when no seed rule matched
-        if (seedMatches.Count == 0 && llmTranslator != null)
+        if (seedMatches.Count == 0)
         {
-            var llmResult = await llmTranslator.TranslateAsync(pair.VbMethodSource, fewShot);
-            if (llmResult.Route == TranslationRoute.HumanQueue)
-                return llmResult;
-            methodCs = llmResult.CsSource;
-            nodeConfidences.Add(llmResult.Confidence);
+            if (llmTranslator != null)
+            {
+                var llmResult = await llmTranslator.TranslateAsync(pair.VbMethodSource, fewShot);
+                if (llmResult.Route != TranslationRoute.HumanQueue)
+                {
+                    methodCs = llmResult.CsSource;
+                    nodeConfidences.Add(llmResult.Confidence);
+                }
+                else
+                {
+                    // LLM failed/sent to queue — keep ICSharpCode output with low baseline
+                    nodeConfidences.Add(0.40);
+                }
+            }
+            else
+            {
+                // No LLM configured — keep ICSharpCode output with low baseline
+                nodeConfidences.Add(0.50);
+            }
         }
 
         // Step [7c]: LlmUsingResolver on complete method C#

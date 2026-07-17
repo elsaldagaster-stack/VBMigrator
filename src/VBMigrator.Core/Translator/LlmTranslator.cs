@@ -44,11 +44,11 @@ public class LlmTranslator(IAnthropicClient client, string? apiKey,
             try
             {
                 var response = await client.Messages(parameters);
-                var csSource = response.FirstMessage?.Text ?? string.Empty;
+                var csSource = ExtractCode(response.FirstMessage?.Text ?? string.Empty);
 
                 return new TranslationResult
                 {
-                    CsSource       = csSource.Trim(),
+                    CsSource       = csSource,
                     Confidence     = 0.75,
                     Route          = TranslationRoute.Llm,
                     CompilerPassed = false
@@ -80,5 +80,36 @@ public class LlmTranslator(IAnthropicClient client, string? apiKey,
             CompilerPassed   = false,
             LlmFailureReason = failureReason
         };
+    }
+
+    // Extract C# from LLM response — handles bare code, ```csharp fences, multiple blocks
+    private static string ExtractCode(string text)
+    {
+        text = text.Trim();
+        if (!text.Contains("```")) return text;
+
+        // Collect all content inside ```...``` blocks
+        var parts  = new System.Text.StringBuilder();
+        var lines  = text.Split('\n');
+        bool inside = false;
+        foreach (var line in lines)
+        {
+            var trimmed = line.TrimStart();
+            if (!inside && trimmed.StartsWith("```"))
+            {
+                inside = true;
+                continue;
+            }
+            if (inside && trimmed.StartsWith("```"))
+            {
+                inside = false;
+                parts.AppendLine();
+                continue;
+            }
+            if (inside) parts.AppendLine(line);
+        }
+
+        var extracted = parts.ToString().Trim();
+        return extracted.Length > 0 ? extracted : text;
     }
 }

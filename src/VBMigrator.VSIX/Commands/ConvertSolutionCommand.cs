@@ -114,7 +114,8 @@ public sealed class ConvertSolutionCommand
                 dte.StatusBar.Text = "VBMigrator: converting solution…";
 
             var progressLog = new System.Text.StringBuilder();
-            var runner = new CliRunner();
+            var opts   = (Options.VBMigratorOptions)_package.GetDialogPage(typeof(Options.VBMigratorOptions));
+            var runner = new CliRunner(opts.EffectiveApiKey);
             var exitCode = await runner.ConvertSolutionAsync(
                 slnPath, outputDir: null,
                 onProgress: line =>
