@@ -16,6 +16,10 @@
       <Group guid="guidVBMigratorCmdSet" id="grpSolution" priority="0x0600">
         <Parent guid="guidSHLMainMenu" id="IDM_VS_CTXT_SOLNNODE"/>
       </Group>
+      <!-- Group in Solution Explorer project node context menu -->
+      <Group guid="guidVBMigratorCmdSet" id="grpProject" priority="0x0600">
+        <Parent guid="guidSHLMainMenu" id="IDM_VS_CTXT_PROJNODE"/>
+      </Group>
     </Groups>
 
     <Buttons>
@@ -31,6 +35,12 @@
           <ButtonText>Convert Solution to C# (VBMigrator)</ButtonText>
         </Strings>
       </Button>
+      <Button guid="guidVBMigratorCmdSet" id="cmdConvertSolution2" priority="0x0100" type="Button">
+        <Parent guid="guidVBMigratorCmdSet" id="grpProject"/>
+        <Strings>
+          <ButtonText>Convert Solution to C# (VBMigrator)</ButtonText>
+        </Strings>
+      </Button>
     </Buttons>
 
   </Commands>
@@ -40,10 +50,12 @@
                 value="{a1b2c3d4-e5f6-7890-abcd-ef1234567890}" />
     <GuidSymbol name="guidVBMigratorCmdSet"
                 value="{b1c2d3e4-f5a6-7890-bcde-f01234567891}">
-      <IDSymbol name="grpFile"            value="0x1020" />
-      <IDSymbol name="grpSolution"        value="0x1021" />
-      <IDSymbol name="cmdConvertFile"     value="0x0100" />
-      <IDSymbol name="cmdConvertSolution" value="0x0102" />
+      <IDSymbol name="grpFile"             value="0x1020" />
+      <IDSymbol name="grpSolution"         value="0x1021" />
+      <IDSymbol name="grpProject"          value="0x1022" />
+      <IDSymbol name="cmdConvertFile"      value="0x0100" />
+      <IDSymbol name="cmdConvertSolution"  value="0x0102" />
+      <IDSymbol name="cmdConvertSolution2" value="0x0103" />
     </GuidSymbol>
   </Symbols>
 
