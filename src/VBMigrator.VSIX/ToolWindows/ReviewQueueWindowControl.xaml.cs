@@ -10,7 +10,11 @@ public partial class ReviewQueueWindowControl : UserControl
 {
     private ReviewQueueItem? _current;
 
-    public ReviewQueueWindowControl() => InitializeComponent();
+    public ReviewQueueWindowControl()
+    {
+        InitializeComponent();
+        Loaded += async (_, _) => await LoadQueueAsync();
+    }
 
     public async System.Threading.Tasks.Task LoadQueueAsync()
     {

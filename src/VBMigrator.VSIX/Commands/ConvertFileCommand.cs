@@ -17,8 +17,20 @@ public sealed class ConvertFileCommand
     private ConvertFileCommand(AsyncPackage package, OleMenuCommandService commandService)
     {
         _package = package;
-        var id = new CommandID(CommandSet, CommandId);
-        commandService.AddCommand(new OleMenuCommand(Execute, id));
+        var id  = new CommandID(CommandSet, CommandId);
+        var cmd = new OleMenuCommand(Execute, id);
+        cmd.BeforeQueryStatus += OnBeforeQueryStatus;
+        commandService.AddCommand(cmd);
+    }
+
+    private void OnBeforeQueryStatus(object sender, EventArgs e)
+    {
+        ThreadHelper.ThrowIfNotOnUIThread();
+        if (sender is not OleMenuCommand cmd) return;
+        var dte      = Package.GetGlobalService(typeof(EnvDTE.DTE)) as EnvDTE.DTE;
+        var filePath = dte?.SelectedItems?.Item(1)?.ProjectItem?.FileNames[1] ?? "";
+        cmd.Visible  = filePath.EndsWith(".vb",   StringComparison.OrdinalIgnoreCase)
+                    || filePath.EndsWith(".aspx",  StringComparison.OrdinalIgnoreCase);
     }
 
     public static async Task InitializeAsync(AsyncPackage package)
@@ -36,7 +48,16 @@ public sealed class ConvertFileCommand
             var dte = await _package.GetServiceAsync(typeof(EnvDTE.DTE)) as EnvDTE.DTE;
             var selectedItem = dte?.SelectedItems?.Item(1)?.ProjectItem;
             var filePath = selectedItem?.FileNames[1];
-            if (filePath == null || !filePath.EndsWith(".vb", StringComparison.OrdinalIgnoreCase))
+            if (filePath == null) return;
+
+            // .aspx → redirect to code-behind .aspx.vb
+            if (filePath.EndsWith(".aspx", StringComparison.OrdinalIgnoreCase))
+            {
+                var codeBehind = filePath + ".vb";
+                if (!File.Exists(codeBehind)) return;
+                filePath = codeBehind;
+            }
+            else if (!filePath.EndsWith(".vb", StringComparison.OrdinalIgnoreCase))
                 return;
 
             var runner = new CliRunner();
