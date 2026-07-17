@@ -45,11 +45,56 @@ public class TranslationPipeline(
         // Step [4]: Split and pair methods
         var pairs = PairMethods(vbSource, initialCs, diffMap).ToList();
 
-        var results = new List<TranslationResult>();
-        foreach (var pair in pairs)
-            results.Add(await ProcessMethodPairAsync(pair, diffMap));
+        if (pairs.Count == 0)
+            return [new TranslationResult { CsSource = initialCs, Confidence = 0.85, Route = TranslationRoute.SeedRule, CompilerPassed = true }];
 
-        return results;
+        var methodResults = new List<TranslationResult>();
+        foreach (var pair in pairs)
+            methodResults.Add(await ProcessMethodPairAsync(pair, diffMap));
+
+        // Reassemble method results back inside the class/struct from initialCs
+        return ReassembleFile(initialCs, methodResults);
+    }
+
+    private static IReadOnlyList<TranslationResult> ReassembleFile(
+        string initialCs, List<TranslationResult> methodResults)
+    {
+        var csTree   = Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree.ParseText(initialCs);
+        var root     = csTree.GetRoot();
+        var typeDecl = root.DescendantNodes()
+            .OfType<Microsoft.CodeAnalysis.CSharp.Syntax.TypeDeclarationSyntax>()
+            .FirstOrDefault();
+
+        if (typeDecl == null)
+            return methodResults;  // snippet without class, return as-is
+
+        // Header: using directives + class declaration up to and including '{'
+        var header = initialCs[..typeDecl.OpenBraceToken.Span.End];
+
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine(header);
+        foreach (var r in methodResults)
+        {
+            foreach (var line in r.CsSource.Trim().Split('\n'))
+                sb.AppendLine("    " + line.TrimEnd('\r'));
+            sb.AppendLine();
+        }
+        sb.Append('}');
+
+        var minConfidence = methodResults.Min(r => r.Confidence);
+        var worstRoute    = methodResults.Any(r => r.Route == TranslationRoute.HumanQueue)
+            ? TranslationRoute.HumanQueue
+            : methodResults.Any(r => r.Route == TranslationRoute.Llm)
+                ? TranslationRoute.Llm
+                : TranslationRoute.SeedRule;
+
+        return [new TranslationResult
+        {
+            CsSource       = sb.ToString(),
+            Confidence     = minConfidence,
+            Route          = worstRoute,
+            CompilerPassed = methodResults.All(r => r.CompilerPassed)
+        }];
     }
 
     private async Task<TranslationResult> ProcessMethodPairAsync(MethodPair pair, DifficultyMap diffMap)
