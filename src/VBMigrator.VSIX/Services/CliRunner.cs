@@ -44,10 +44,14 @@ public class CliRunner
     // For --solution: fires and monitors stderr for progress, returns exit code
     public async Task<int> ConvertSolutionAsync(
         string slnPath, string? outputDir,
-        Action<string>? onProgress, CancellationToken ct = default)
+        Action<string>? onProgress,
+        bool replace = false, string? backupDir = null,
+        CancellationToken ct = default)
     {
         var args = $"convert --solution \"{slnPath}\"";
-        if (outputDir != null) args += $" --output \"{outputDir}\"";
+        if (outputDir  != null) args += $" --output \"{outputDir}\"";
+        if (replace)            args += " --replace";
+        if (backupDir  != null) args += $" --backup-dir \"{backupDir}\"";
 
         var psi = new ProcessStartInfo
         {

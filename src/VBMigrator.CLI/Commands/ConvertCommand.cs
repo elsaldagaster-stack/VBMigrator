@@ -20,12 +20,14 @@ public static class ConvertCommandBuilder
     {
         var cmd = new Command("convert", "Convert VB.NET files to C#");
 
-        var fileOpt     = new Option<FileInfo?>("--file")       { Description = "Single .vb file to convert" };
-        var solutionOpt = new Option<FileInfo?>("--solution")  { Description = "Solution .sln to convert" };
-        var outputOpt   = new Option<DirectoryInfo?>("--output") { Description = "Output directory" };
-        var jsonOpt     = new Option<bool>("--json-output")    { Description = "Emit JSON to stdout (--file mode only)" };
-        var dryRunOpt   = new Option<bool>("--dry-run")        { Description = "Report only, do not write files" };
-        var reportOpt   = new Option<FileInfo?>("--report")    { Description = "Report HTML output path" };
+        var fileOpt      = new Option<FileInfo?>("--file")        { Description = "Single .vb file to convert" };
+        var solutionOpt  = new Option<FileInfo?>("--solution")   { Description = "Solution .sln to convert" };
+        var outputOpt    = new Option<DirectoryInfo?>("--output") { Description = "Output directory" };
+        var jsonOpt      = new Option<bool>("--json-output")     { Description = "Emit JSON to stdout (--file mode only)" };
+        var dryRunOpt    = new Option<bool>("--dry-run")         { Description = "Report only, do not write files" };
+        var reportOpt    = new Option<FileInfo?>("--report")     { Description = "Report HTML output path" };
+        var replaceOpt   = new Option<bool>("--replace")         { Description = "Delete .vb/.vbproj after conversion" };
+        var backupDirOpt = new Option<DirectoryInfo?>("--backup-dir") { Description = "Backup original files here before replacing" };
 
         cmd.Add(fileOpt);
         cmd.Add(solutionOpt);
@@ -33,6 +35,8 @@ public static class ConvertCommandBuilder
         cmd.Add(jsonOpt);
         cmd.Add(dryRunOpt);
         cmd.Add(reportOpt);
+        cmd.Add(replaceOpt);
+        cmd.Add(backupDirOpt);
 
         cmd.SetAction(async (ParseResult pr) =>
         {
@@ -41,11 +45,13 @@ public static class ConvertCommandBuilder
             var output     = pr.GetValue(outputOpt);
             var jsonOutput = pr.GetValue(jsonOpt);
             var dryRun     = pr.GetValue(dryRunOpt);
+            var replace    = pr.GetValue(replaceOpt);
+            var backupDir  = pr.GetValue(backupDirOpt);
 
             if (file != null)
                 await ConvertFile(file, jsonOutput);
             else if (solution != null)
-                await ConvertSolution(solution, output, dryRun);
+                await ConvertSolution(solution, output, dryRun, replace, backupDir);
         });
 
         return cmd;
@@ -90,7 +96,9 @@ public static class ConvertCommandBuilder
         }
     }
 
-    private static async Task ConvertSolution(FileInfo sln, DirectoryInfo? output, bool dryRun)
+    private static async Task ConvertSolution(
+        FileInfo sln, DirectoryInfo? output, bool dryRun,
+        bool replace = false, DirectoryInfo? backupDir = null)
     {
         var baseDir  = sln.Directory!;
         var vbFiles  = baseDir.GetFiles("*.vb", SearchOption.AllDirectories);
@@ -100,6 +108,17 @@ public static class ConvertCommandBuilder
 
         if (output != null && !output.Exists)
             output.Create();
+
+        // Backup originals before any modification
+        if (replace && backupDir != null && !dryRun)
+        {
+            Directory.CreateDirectory(backupDir.FullName);
+            foreach (var f in vbFiles)
+                File.Copy(f.FullName, Path.Combine(backupDir.FullName, f.Name), overwrite: true);
+            foreach (var f in baseDir.GetFiles("*.vbproj", SearchOption.AllDirectories))
+                File.Copy(f.FullName, Path.Combine(backupDir.FullName, f.Name), overwrite: true);
+            Console.Error.WriteLine($"BACKUP: {backupDir.FullName}");
+        }
 
         foreach (var vbFile in vbFiles)
         {
@@ -127,6 +146,12 @@ public static class ConvertCommandBuilder
                     ? Path.Combine(output.FullName, Path.ChangeExtension(vbFile.Name, ".cs"))
                     : Path.ChangeExtension(vbFile.FullName, ".cs");
                 await File.WriteAllTextAsync(outPath, csSource);
+
+                if (replace)
+                {
+                    File.Delete(vbFile.FullName);
+                    Console.Error.WriteLine($"DELETED: {vbFile.Name}");
+                }
             }
         }
 
@@ -144,7 +169,14 @@ public static class ConvertCommandBuilder
                 Console.Error.WriteLine($"PROJECT: {vbproj.Name} → {Path.GetFileName(outPath)}");
 
                 if (!dryRun)
+                {
                     await File.WriteAllTextAsync(outPath, csproj);
+                    if (replace)
+                    {
+                        File.Delete(vbproj.FullName);
+                        Console.Error.WriteLine($"DELETED: {vbproj.Name}");
+                    }
+                }
             }
             catch (Exception ex)
             {

@@ -68,6 +68,48 @@ public sealed class ConvertSolutionCommand
                 return;
             }
 
+            // Ask whether to replace source files
+            var replaceChoice = System.Windows.MessageBox.Show(
+                "Replace source files after conversion?\n\n" +
+                "  • .vb files → deleted (replaced by .cs)\n" +
+                "  • .vbproj  → removed from solution and deleted\n" +
+                "  • .csproj  → added to solution\n\n" +
+                "Yes    = replace and create backup\n" +
+                "No     = replace without backup\n" +
+                "Cancel = convert only, keep .vb files",
+                "VBMigrator — Replace files?",
+                System.Windows.MessageBoxButton.YesNoCancel,
+                System.Windows.MessageBoxImage.Question);
+
+            if (replaceChoice == System.Windows.MessageBoxResult.Cancel)
+                return;
+
+            bool replace   = true;
+            bool doBackup  = replaceChoice == System.Windows.MessageBoxResult.Yes;
+            string? backupDir = doBackup
+                ? System.IO.Path.Combine(System.IO.Path.GetDirectoryName(slnPath)!, "_vbmigrator_backup")
+                : null;
+
+            // Capture VB projects in solution BEFORE CLI deletes .vbproj from disk
+            var vbProjects = new System.Collections.Generic.List<(string VbprojPath, string CsprojPath)>();
+            if (dte?.Solution?.Projects != null)
+            {
+                foreach (EnvDTE.Project proj in dte.Solution.Projects)
+                {
+                    var fn = proj?.FileName ?? "";
+                    if (fn.EndsWith(".vbproj", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var csproj = System.IO.Path.ChangeExtension(fn, ".csproj");
+                        vbProjects.Add((fn, csproj));
+                        // Close any open documents for this project to avoid VS file locks
+                        try { proj!.ProjectItems?.Cast<EnvDTE.ProjectItem>()
+                                  .Where(i => i.IsOpen[EnvDTE.Constants.vsViewKindAny])
+                                  .ToList().ForEach(i => i.Document?.Close()); }
+                        catch { /* best-effort */ }
+                    }
+                }
+            }
+
             if (dte?.StatusBar != null)
                 dte.StatusBar.Text = "VBMigrator: converting solution…";
 
@@ -79,7 +121,8 @@ public sealed class ConvertSolutionCommand
                 {
                     progressLog.AppendLine(line);
                     System.Diagnostics.Debug.WriteLine($"[VBMigrator] {line}");
-                });
+                },
+                replace: replace, backupDir: backupDir);
 
             if (dte?.StatusBar != null)
                 dte.StatusBar.Text = exitCode == 0
@@ -94,6 +137,38 @@ public sealed class ConvertSolutionCommand
                     System.Windows.MessageBoxButton.OK,
                     System.Windows.MessageBoxImage.Error);
                 return;
+            }
+
+            // Swap .vbproj → .csproj in the VS solution
+            if (replace && vbProjects.Count > 0 && dte?.Solution != null)
+            {
+                await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+                foreach (var (vbprojPath, csprojPath) in vbProjects)
+                {
+                    try
+                    {
+                        // Find and remove the VB project (file may already be deleted by CLI)
+                        foreach (EnvDTE.Project proj in dte.Solution.Projects.Cast<EnvDTE.Project>().ToList())
+                        {
+                            if (string.Equals(proj.FileName, vbprojPath, StringComparison.OrdinalIgnoreCase))
+                            {
+                                dte.Solution.Remove(proj);
+                                break;
+                            }
+                        }
+                        // Add the new .csproj
+                        if (System.IO.File.Exists(csprojPath))
+                            dte.Solution.AddFromFile(csprojPath);
+                    }
+                    catch (Exception swapEx)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[VBMigrator] swap failed: {swapEx.Message}");
+                    }
+                }
+                dte.Solution.SaveAs(slnPath);
+
+                if (dte.StatusBar != null)
+                    dte.StatusBar.Text = "VBMigrator: solution updated.";
             }
 
             var window = await _package.ShowToolWindowAsync(
