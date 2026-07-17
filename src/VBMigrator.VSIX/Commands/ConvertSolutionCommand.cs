@@ -96,8 +96,11 @@ public sealed class ConvertSolutionCommand
                 return;
             }
 
-            await _package.ShowToolWindowAsync(
-                typeof(ToolWindows.ReviewQueueWindow), 0, true, _package.DisposalToken);
+            var window = await _package.ShowToolWindowAsync(
+                typeof(ToolWindows.ReviewQueueWindow), 0, true, _package.DisposalToken)
+                as ToolWindows.ReviewQueueWindow;
+            if (window?.Control != null)
+                await window.Control.LoadQueueAsync();
         }
         catch (Exception ex)
         {

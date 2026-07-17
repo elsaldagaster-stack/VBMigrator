@@ -1,37 +1,92 @@
+using System;
 using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
+using VBMigrator.VSIX.Services;
 
 namespace VBMigrator.VSIX.ToolWindows;
 
 public partial class ReviewQueueWindowControl : UserControl
 {
+    private ReviewQueueItem? _current;
+
     public ReviewQueueWindowControl() => InitializeComponent();
 
-    private void Accept_Click(object sender, RoutedEventArgs e)
+    public async System.Threading.Tasks.Task LoadQueueAsync()
     {
-        MessageBox.Show("Accepted. File written.", "VBMigrator");
+        try
+        {
+            var runner = new CliRunner();
+            var items  = await runner.GetQueueAsync();
+            QueueList.ItemsSource = items;
+            Header.Text = $"Review Queue ({items.Count} pendientes)";
+        }
+        catch (Exception ex)
+        {
+            Header.Text = $"Review Queue — error: {ex.Message}";
+        }
+    }
+
+    private void QueueList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        _current     = QueueList.SelectedItem as ReviewQueueItem;
+        VbPanel.Text = _current?.VbSource ?? "";
+        CsPanel.Text = _current?.CsSource ?? "";
+    }
+
+    private async void Accept_Click(object sender, RoutedEventArgs e)
+    {
+        if (_current == null) return;
+        try
+        {
+            await new CliRunner().AcceptQueueItemAsync(_current.Id);
+            await LoadQueueAsync();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"VBMigrator error: {ex.Message}", "VBMigrator");
+        }
     }
 
     private async void EditAndLearn_Click(object sender, RoutedEventArgs e)
     {
-        var vb = VbPanel.Text.Trim();
-        var cs = CsPanel.Text.Trim();
+        if (_current == null) return;
+        var vb  = VbPanel.Text.Trim();
+        var cs  = CsPanel.Text.Trim();
+        var tag = _current.Tag ?? "manual";
         if (string.IsNullOrEmpty(vb) || string.IsNullOrEmpty(cs)) return;
 
-        var args = $"kb save --vb \"{vb.Replace("\"", "\\\"")}\" --cs \"{cs.Replace("\"", "\\\"")}\" --tag \"manual\"";
-        var psi = new ProcessStartInfo(Services.CliLocator.FindExecutable(), args)
+        try
         {
-            CreateNoWindow  = true,
-            UseShellExecute = false
-        };
-        Process.Start(psi)?.WaitForExit();
-        MessageBox.Show("Correction saved to knowledge base.", "VBMigrator");
-        await System.Threading.Tasks.Task.CompletedTask;
+            var saveArgs = $"kb save --vb \"{vb.Replace("\"", "\\\"")}\" --cs \"{cs.Replace("\"", "\\\"")}\" --tag \"{tag}\"";
+            var psi = new ProcessStartInfo(CliLocator.FindExecutable(), saveArgs)
+            {
+                CreateNoWindow  = true,
+                UseShellExecute = false
+            };
+            Process.Start(psi)?.WaitForExit();
+
+            await new CliRunner().AcceptQueueItemAsync(_current.Id);
+            MessageBox.Show("Correction saved to knowledge base.", "VBMigrator");
+            await LoadQueueAsync();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"VBMigrator error: {ex.Message}", "VBMigrator");
+        }
     }
 
-    private void Manual_Click(object sender, RoutedEventArgs e)
+    private async void Manual_Click(object sender, RoutedEventArgs e)
     {
-        MessageBox.Show("Item marked for manual review.", "VBMigrator");
+        if (_current == null) return;
+        try
+        {
+            await new CliRunner().DismissQueueItemAsync(_current.Id);
+            await LoadQueueAsync();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"VBMigrator error: {ex.Message}", "VBMigrator");
+        }
     }
 }

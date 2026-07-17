@@ -11,4 +11,6 @@ public class ReviewQueueWindow : ToolWindowPane
         Caption = "VBMigrator — Review Queue";
         Content = new ReviewQueueWindowControl();
     }
+
+    public ReviewQueueWindowControl Control => (ReviewQueueWindowControl)Content;
 }

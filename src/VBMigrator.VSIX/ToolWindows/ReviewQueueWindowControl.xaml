@@ -9,23 +9,27 @@
       <RowDefinition Height="Auto"/>
     </Grid.RowDefinitions>
 
-    <TextBlock Grid.Row="0" Text="Review Queue" FontWeight="Bold" Margin="4"/>
+    <TextBlock Grid.Row="0" x:Name="Header" Text="Review Queue" FontWeight="Bold" Margin="4"/>
 
-    <ListBox Grid.Row="1" x:Name="QueueList" DisplayMemberPath="MethodName"/>
+    <ListBox Grid.Row="1" x:Name="QueueList"
+             DisplayMemberPath="DisplayName"
+             SelectionChanged="QueueList_SelectionChanged"/>
 
     <Grid Grid.Row="2">
       <Grid.ColumnDefinitions>
         <ColumnDefinition Width="*"/>
         <ColumnDefinition Width="*"/>
       </Grid.ColumnDefinitions>
-      <TextBox Grid.Column="0" x:Name="VbPanel" IsReadOnly="True" FontFamily="Consolas"/>
-      <TextBox Grid.Column="1" x:Name="CsPanel" FontFamily="Consolas" AcceptsReturn="True"/>
+      <TextBox Grid.Column="0" x:Name="VbPanel" IsReadOnly="True" FontFamily="Consolas"
+               VerticalScrollBarVisibility="Auto"/>
+      <TextBox Grid.Column="1" x:Name="CsPanel" FontFamily="Consolas" AcceptsReturn="True"
+               VerticalScrollBarVisibility="Auto"/>
     </Grid>
 
     <StackPanel Grid.Row="3" Orientation="Horizontal">
-      <Button Content="✓ Aceptar" Click="Accept_Click" Margin="4"/>
-      <Button Content="✎ Editar y aprender" Click="EditAndLearn_Click" Margin="4"/>
-      <Button Content="✗ Manual" Click="Manual_Click" Margin="4"/>
+      <Button Content="&#x2713; Aceptar"           Click="Accept_Click"       Margin="4"/>
+      <Button Content="&#x270E; Editar y aprender" Click="EditAndLearn_Click" Margin="4"/>
+      <Button Content="&#x2717; Manual"            Click="Manual_Click"       Margin="4"/>
     </StackPanel>
   </Grid>
 </UserControl>

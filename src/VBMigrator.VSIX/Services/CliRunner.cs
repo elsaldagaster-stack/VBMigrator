@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Text.Json;
 using System.Threading;
@@ -72,5 +73,53 @@ public class CliRunner
         await stdoutTask;
 
         return proc.ExitCode;
+    }
+
+    public async Task<List<ReviewQueueItem>> GetQueueAsync()
+    {
+        var psi = new ProcessStartInfo
+        {
+            FileName               = CliLocator.FindExecutable(),
+            Arguments              = "queue list",
+            RedirectStandardOutput = true,
+            RedirectStandardError  = true,
+            UseShellExecute        = false,
+            CreateNoWindow         = true
+        };
+        using var proc = Process.Start(psi)!;
+        var stdoutTask = proc.StandardOutput.ReadToEndAsync();
+        var stderrTask = proc.StandardError.ReadToEndAsync();
+        await Task.Run(() => proc.WaitForExit());
+        var json = await stdoutTask;
+        var _err = await stderrTask;
+        if (string.IsNullOrWhiteSpace(json)) return new List<ReviewQueueItem>();
+        return JsonSerializer.Deserialize<List<ReviewQueueItem>>(json, JsonOpts)
+               ?? new List<ReviewQueueItem>();
+    }
+
+    public async Task AcceptQueueItemAsync(int id)
+    {
+        var psi = new ProcessStartInfo
+        {
+            FileName        = CliLocator.FindExecutable(),
+            Arguments       = $"queue accept --id {id}",
+            UseShellExecute = false,
+            CreateNoWindow  = true
+        };
+        using var proc = Process.Start(psi)!;
+        await Task.Run(() => proc.WaitForExit());
+    }
+
+    public async Task DismissQueueItemAsync(int id)
+    {
+        var psi = new ProcessStartInfo
+        {
+            FileName        = CliLocator.FindExecutable(),
+            Arguments       = $"queue dismiss --id {id}",
+            UseShellExecute = false,
+            CreateNoWindow  = true
+        };
+        using var proc = Process.Start(psi)!;
+        await Task.Run(() => proc.WaitForExit());
     }
 }

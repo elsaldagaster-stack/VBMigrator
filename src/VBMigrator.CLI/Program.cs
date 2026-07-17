@@ -6,5 +6,6 @@ var rootCommand = new RootCommand("VBMigrator — VB.NET to C# migration tool");
 rootCommand.Add(ConvertCommandBuilder.Build());
 rootCommand.Add(KbCommandBuilder.Build());
 rootCommand.Add(ReportCommandBuilder.Build());
+rootCommand.Add(QueueCommandBuilder.Build());
 
 return await rootCommand.Parse(args).InvokeAsync();

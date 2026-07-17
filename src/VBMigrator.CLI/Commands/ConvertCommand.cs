@@ -1,7 +1,9 @@
 using System.CommandLine;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using VBMigrator.CLI;
 using VBMigrator.Core.Models;
+using VBMigrator.Core.ProjectFileConverter;
 using VBMigrator.Core.Translator;
 
 namespace VBMigrator.CLI.Commands;
@@ -93,6 +95,8 @@ public static class ConvertCommandBuilder
         var baseDir  = sln.Directory!;
         var vbFiles  = baseDir.GetFiles("*.vb", SearchOption.AllDirectories);
         var pipeline = PipelineFactory.Build();
+        var store    = new TranslationLogStore();
+        await store.InitializeAsync();
 
         if (output != null && !output.Exists)
             output.Create();
@@ -101,18 +105,50 @@ public static class ConvertCommandBuilder
         {
             var vbSource = await File.ReadAllTextAsync(vbFile.FullName);
             var results  = await pipeline.ProcessFileAsync(vbSource, vbFile.FullName);
-            var status   = results.All(r => r.Route != TranslationRoute.HumanQueue) ? "OK" : "HUMAN_QUEUE";
+
+            var csSource       = string.Join("\n\n", results.Select(r => r.CsSource));
+            var confidence     = results.Count > 0 ? results.Min(r => r.Confidence) : 0.0;
+            var route          = results.Any(r => r.Route == TranslationRoute.HumanQueue) ? "HumanQueue"
+                               : results.Any(r => r.Route == TranslationRoute.Llm)        ? "Llm"
+                               : "SeedRule";
+            var compilerPassed = results.All(r => r.CompilerPassed);
+            var tag            = results.FirstOrDefault(r => r.PatternTag != null)?.PatternTag;
+            var status         = route == "HumanQueue" ? "HUMAN_QUEUE" : "OK";
 
             Console.Error.WriteLine($"FILE: {vbFile.Name} {status}");
+
+            await store.WriteFileResultAsync(
+                vbFile.FullName, vbSource, csSource,
+                confidence, route, compilerPassed, tag);
 
             if (!dryRun)
             {
                 var outPath = output != null
                     ? Path.Combine(output.FullName, Path.ChangeExtension(vbFile.Name, ".cs"))
                     : Path.ChangeExtension(vbFile.FullName, ".cs");
-
-                var csSource = string.Join("\n\n", results.Select(r => r.CsSource));
                 await File.WriteAllTextAsync(outPath, csSource);
+            }
+        }
+
+        // Convert .vbproj → .csproj
+        foreach (var vbproj in baseDir.GetFiles("*.vbproj", SearchOption.AllDirectories))
+        {
+            try
+            {
+                var xml     = await File.ReadAllTextAsync(vbproj.FullName);
+                var csproj  = VbprojToCsprojConverter.Convert(xml);
+                var outPath = output != null
+                    ? Path.Combine(output.FullName, Path.ChangeExtension(vbproj.Name, ".csproj"))
+                    : Path.ChangeExtension(vbproj.FullName, ".csproj");
+
+                Console.Error.WriteLine($"PROJECT: {vbproj.Name} → {Path.GetFileName(outPath)}");
+
+                if (!dryRun)
+                    await File.WriteAllTextAsync(outPath, csproj);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"PROJECT: {vbproj.Name} FAIL — {ex.Message}");
             }
         }
     }
