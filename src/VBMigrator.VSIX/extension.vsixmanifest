@@ -1,0 +1,16 @@
+<PackageManifest Version="2.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011">
+  <Metadata>
+    <Identity Id="VBMigrator.VSIX" Version="1.0" Language="en-US" Publisher="VBMigrator" />
+    <DisplayName>VBMigrator</DisplayName>
+    <Description>VB.NET to C# migration tool with Roslyn + LLM hybrid pipeline</Description>
+  </Metadata>
+  <Installation>
+    <InstallationTarget Id="Microsoft.VisualStudio.Community" Version="[17.0, 18.0)" />
+  </Installation>
+  <Prerequisites>
+    <Prerequisite Id="Microsoft.VisualStudio.Component.CoreEditor" Version="[17.0, 18.0)" DisplayName="Visual Studio core editor" />
+  </Prerequisites>
+  <Assets>
+    <Asset Type="Microsoft.VisualStudio.VsPackage" Path="VBMigrator.VSIX.pkgdef" />
+  </Assets>
+</PackageManifest>
