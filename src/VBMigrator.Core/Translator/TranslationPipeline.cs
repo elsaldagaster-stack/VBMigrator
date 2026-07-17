@@ -48,15 +48,49 @@ public class TranslationPipeline(
         if (pairs.Count == 0)
             return [new TranslationResult { CsSource = initialCs, Confidence = 0.85, Route = TranslationRoute.SeedRule, CompilerPassed = true }];
 
+        // Steps [5]-[7]: translate each method (no per-method validation)
         var methodResults = new List<TranslationResult>();
         foreach (var pair in pairs)
             methodResults.Add(await ProcessMethodPairAsync(pair, diffMap));
 
-        // Reassemble method results back inside the class/struct from initialCs
-        return ReassembleFile(initialCs, methodResults);
+        // Reassemble method results inside the class wrapper from initialCs
+        var (assembledCs, baseConfidence, baseRoute) = ReassembleFile(initialCs, methodResults);
+
+        // Step [8]: validate the assembled file (not isolated method bodies)
+        var validation = await validator.ValidateAsync(assembledCs);
+        var finalCs    = assembledCs;
+
+        if (!validation.Success && repairAgent != null)
+        {
+            var repaired = await repairAgent.RepairAsync(
+                finalCs,
+                string.Join("; ", validation.Errors),
+                validation.Errors,
+                baseConfidence);
+
+            if (repaired.Repaired)
+            {
+                finalCs       = repaired.CsSource;
+                baseConfidence = Math.Max(0.0, baseConfidence - 0.10);
+            }
+        }
+
+        // Step [9]: score
+        var finalRoute = !validation.Success && baseRoute != TranslationRoute.HumanQueue
+            ? TranslationRoute.HumanQueue
+            : baseRoute;
+        var finalConfidence = validation.Success ? baseConfidence : Math.Min(baseConfidence, 0.60);
+
+        return [new TranslationResult
+        {
+            CsSource       = finalCs,
+            Confidence     = finalConfidence,
+            Route          = finalRoute,
+            CompilerPassed = validation.Success
+        }];
     }
 
-    private static IReadOnlyList<TranslationResult> ReassembleFile(
+    private static (string assembledCs, double confidence, TranslationRoute route) ReassembleFile(
         string initialCs, List<TranslationResult> methodResults)
     {
         var csTree   = Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree.ParseText(initialCs);
@@ -65,21 +99,25 @@ public class TranslationPipeline(
             .OfType<Microsoft.CodeAnalysis.CSharp.Syntax.TypeDeclarationSyntax>()
             .FirstOrDefault();
 
-        if (typeDecl == null)
-            return methodResults;  // snippet without class, return as-is
-
-        // Header: using directives + class declaration up to and including '{'
-        var header = initialCs[..typeDecl.OpenBraceToken.Span.End];
-
-        var sb = new System.Text.StringBuilder();
-        sb.AppendLine(header);
-        foreach (var r in methodResults)
+        string assembled;
+        if (typeDecl != null)
         {
-            foreach (var line in r.CsSource.Trim().Split('\n'))
-                sb.AppendLine("    " + line.TrimEnd('\r'));
-            sb.AppendLine();
+            var header = initialCs[..typeDecl.OpenBraceToken.Span.End];
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine(header);
+            foreach (var r in methodResults)
+            {
+                foreach (var line in r.CsSource.Trim().Split('\n'))
+                    sb.AppendLine("    " + line.TrimEnd('\r'));
+                sb.AppendLine();
+            }
+            sb.Append('}');
+            assembled = sb.ToString();
         }
-        sb.Append('}');
+        else
+        {
+            assembled = string.Join("\n\n", methodResults.Select(r => r.CsSource));
+        }
 
         var minConfidence = methodResults.Min(r => r.Confidence);
         var worstRoute    = methodResults.Any(r => r.Route == TranslationRoute.HumanQueue)
@@ -88,13 +126,7 @@ public class TranslationPipeline(
                 ? TranslationRoute.Llm
                 : TranslationRoute.SeedRule;
 
-        return [new TranslationResult
-        {
-            CsSource       = sb.ToString(),
-            Confidence     = minConfidence,
-            Route          = worstRoute,
-            CompilerPassed = methodResults.All(r => r.CompilerPassed)
-        }];
+        return (assembled, minConfidence, worstRoute);
     }
 
     private async Task<TranslationResult> ProcessMethodPairAsync(MethodPair pair, DifficultyMap diffMap)
@@ -170,41 +202,16 @@ public class TranslationPipeline(
         // Step [7c]: LlmUsingResolver on complete method C#
         usingResolver.Resolve(methodCs, null);
 
-        // Step [8]: Validate
-        var finalCs    = methodCs;
-        var validation = await validator.ValidateAsync(finalCs);
-
-        if (!validation.Success && repairAgent != null)
-        {
-            var repaired = await repairAgent.RepairAsync(
-                finalCs,
-                string.Join("; ", validation.Errors),
-                validation.Errors,
-                nodeConfidences.DefaultIfEmpty(0.75).Min());
-
-            if (!repaired.Repaired)
-                return new TranslationResult
-                {
-                    CsSource       = finalCs,
-                    Confidence     = 0.0,
-                    Route          = TranslationRoute.HumanQueue,
-                    CompilerPassed = false
-                };
-
-            finalCs = repaired.CsSource;
-            nodeConfidences.Add(repaired.Confidence);
-        }
-
-        // Step [9]: Score
-        var finalConfidence = ConfidenceScorer.Score(nodeConfidences);
-        var route           = ConfidenceScorer.GetRoute(finalConfidence);
+        // Validation and scoring happen at file level after ReassembleFile
+        var confidence = ConfidenceScorer.Score(nodeConfidences);
+        var route      = seedMatches.Count > 0 ? TranslationRoute.SeedRule : TranslationRoute.Llm;
 
         return new TranslationResult
         {
-            CsSource       = finalCs,
-            Confidence     = finalConfidence,
+            CsSource       = methodCs,
+            Confidence     = confidence,
             Route          = route,
-            CompilerPassed = validation.Success
+            CompilerPassed = false  // set at file level after assembly + validation
         };
     }
 
