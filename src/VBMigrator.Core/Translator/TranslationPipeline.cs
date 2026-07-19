@@ -46,7 +46,10 @@ public class TranslationPipeline(
         var pairs = PairMethods(vbSource, initialCs, diffMap).ToList();
 
         if (pairs.Count == 0)
-            return [new TranslationResult { CsSource = initialCs, Confidence = 0.85, Route = TranslationRoute.SeedRule, CompilerPassed = true }];
+        {
+            var fixedCs = CsOutputFixer.Fix(initialCs);
+            return [new TranslationResult { CsSource = fixedCs, Confidence = 0.85, Route = TranslationRoute.SeedRule, CompilerPassed = true }];
+        }
 
         // Steps [5]-[7]: translate each method (no per-method validation)
         var methodResults = new List<TranslationResult>();
@@ -55,6 +58,19 @@ public class TranslationPipeline(
 
         // Reassemble method results inside the class wrapper from initialCs
         var (assembledCs, baseConfidence, baseRoute) = ReassembleFile(initialCs, methodResults);
+
+        // Resolver pass on assembled file — catches types in flag-free methods (e.g. SqlParameter in DBHelper)
+        var assembledResolution = usingResolver.Resolve(assembledCs, null);
+        var missingUsings = assembledResolution.Namespaces
+            .Where(ns => !assembledCs.Contains($"using {ns};"))
+            .OrderBy(ns => ns)
+            .Select(ns => $"using {ns};")
+            .ToList();
+        if (missingUsings.Count > 0)
+            assembledCs = string.Join("\r\n", missingUsings) + "\r\n" + assembledCs;
+
+        // Fix known ICSharpCode output gaps (VB indexer () → [], ParamArray () → [])
+        assembledCs = CsOutputFixer.Fix(assembledCs);
 
         // Step [8]: validate the assembled file (not isolated method bodies)
         var validation = await validator.ValidateAsync(assembledCs);
