@@ -207,6 +207,46 @@ public static class ConvertCommandBuilder
                 Console.Error.WriteLine($"PROJECT: {vbproj.Name} FAIL — {ex.Message}");
             }
         }
+
+        // Process .aspx / .master / .ascx markup files
+        var markupExts    = new[] { "*.aspx", "*.master", "*.ascx" };
+        var markupFiles   = markupExts
+            .SelectMany(ext => baseDir.GetFiles(ext, SearchOption.AllDirectories))
+            .Where(f => !f.FullName.StartsWith(backupPrefix, StringComparison.OrdinalIgnoreCase));
+
+        foreach (var markupFile in markupFiles)
+        {
+            try
+            {
+                var original  = await File.ReadAllTextAsync(markupFile.FullName);
+                var processed = AspxMarkupProcessor.Process(original);
+
+                if (processed == original)
+                {
+                    Console.Error.WriteLine($"MARKUP: {markupFile.Name} SKIP (no VB markers)");
+                    continue;
+                }
+
+                Console.Error.WriteLine($"MARKUP: {markupFile.Name} OK");
+
+                if (!dryRun)
+                {
+                    var outPath = output != null
+                        ? Path.Combine(output.FullName,
+                            Path.GetRelativePath(baseDir.FullName, markupFile.FullName))
+                        : markupFile.FullName;
+
+                    if (output != null)
+                        Directory.CreateDirectory(Path.GetDirectoryName(outPath)!);
+
+                    await File.WriteAllTextAsync(outPath, processed);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"MARKUP: {markupFile.Name} FAIL — {ex.Message}");
+            }
+        }
     }
 }
 
