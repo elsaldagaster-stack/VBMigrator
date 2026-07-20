@@ -14,7 +14,7 @@ public class LlmTranslatorTests
         var fakeClient = new FakeAnthropicClient("int x = 0;");
         var translator = new LlmTranslator(fakeClient, null);
 
-        var result = await translator.TranslateAsync("Dim x As Integer = 0", null);
+        var result = await translator.TranslateAsync("Dim x As Integer = 0", null, flagHint: "on_error_goto");
 
         Assert.Equal(TranslationRoute.Llm, result.Route);
         Assert.Contains("int x", result.CsSource);
@@ -27,7 +27,7 @@ public class LlmTranslatorTests
         var fakeClient = new FakeAnthropicClient(null, throwRateLimit: true);
         var translator = new LlmTranslator(fakeClient, null, retryCount: 2, retryBaseDelayMs: 1);
 
-        var result = await translator.TranslateAsync("Dim x As Integer = 0", null);
+        var result = await translator.TranslateAsync("Dim x As Integer = 0", null, flagHint: "on_error_goto");
 
         Assert.Equal(TranslationRoute.HumanQueue, result.Route);
         Assert.Equal(LlmFailureReason.RateLimit, result.LlmFailureReason);
