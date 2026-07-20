@@ -179,6 +179,28 @@ public static class ConvertCommandBuilder
             }
         }
 
+        // Cross-file property case fix: build member index from all .cs files,
+        // then fix object initializer assignments that differ only in case.
+        if (!dryRun)
+        {
+            var csFiles = baseDir.GetFiles("*.cs", SearchOption.AllDirectories)
+                .Where(f => !f.FullName.StartsWith(backupPrefix, StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+
+            var csSources = await Task.WhenAll(csFiles.Select(f => File.ReadAllTextAsync(f.FullName)));
+            var memberIndex = PropertyCaseFixer.BuildMemberIndex(csSources);
+
+            for (int i = 0; i < csFiles.Length; i++)
+            {
+                var fixed2 = PropertyCaseFixer.Fix(csSources[i], memberIndex);
+                if (fixed2 != csSources[i])
+                {
+                    await File.WriteAllTextAsync(csFiles[i].FullName, fixed2);
+                    Console.Error.WriteLine($"CASE_FIX: {csFiles[i].Name}");
+                }
+            }
+        }
+
         // Convert .vbproj → .csproj
         foreach (var vbproj in baseDir.GetFiles("*.vbproj", SearchOption.AllDirectories))
         {
