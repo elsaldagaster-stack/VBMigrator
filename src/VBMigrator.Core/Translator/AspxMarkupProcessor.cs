@@ -114,7 +114,7 @@ public static class AspxMarkupProcessor
             }
             else
             {
-                var cond = ConvertVbExpression(args[0].Trim());
+                var cond = ConvertVbCondition(ConvertVbExpression(args[0].Trim()));
                 var t    = ConvertVbExpression(args[1].Trim());
                 var f    = ConvertVbExpression(args[2].Trim());
                 sb.Append($"({cond} ? {t} : {f})");
@@ -124,6 +124,14 @@ public static class AspxMarkupProcessor
 
         return sb.ToString();
     }
+
+    // In boolean condition context, VB = is always comparison → C# ==
+    private static readonly Regex _vbEqComparison = new(
+        @"(?<![=!<>])=(?!=)",
+        RegexOptions.Compiled);
+
+    private static string ConvertVbCondition(string cond)
+        => _vbEqComparison.Replace(cond, "==");
 
     // Finds the next standalone "If(" in s starting at pos.
     // Standalone = not preceded by a letter, digit, or underscore.
