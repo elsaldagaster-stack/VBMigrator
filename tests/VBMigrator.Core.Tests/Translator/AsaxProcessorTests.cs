@@ -72,6 +72,26 @@ public class AsaxProcessorTests
     }
 
     [Fact]
+    public async Task ProcessAsync_VbFakeCharLiteralArray_ConvertedCorrectly()
+    {
+        // VB '|' inside New Char() {} is actually a comment — pre-processor must fix it
+        const string input = """
+            <%@ Application Language="VB" %>
+            <script runat="server">
+                Sub Test(ByVal sender As Object, ByVal e As EventArgs)
+                    Dim parts As String() = "a|b".Split(New Char() {'|'})
+                End Sub
+            </script>
+            """;
+
+        var result = await AsaxProcessor.ProcessAsync(input, _translator);
+        // Should not contain the mangled ICSharpCode output
+        Assert.DoesNotContain("// |'}", result);
+        Assert.Contains("Split", result);
+        Assert.Contains("|", result);
+    }
+
+    [Fact]
     public async Task ProcessAsync_NoCSharpMarkup_ReturnsUnchanged()
     {
         const string csharpAsax = """

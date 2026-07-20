@@ -16,6 +16,12 @@ public static class AsaxProcessor
         @"Language\s*=\s*""VB""",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
+    // VB uses ' as comment delimiter, so {'|'} is read as { + comment '|'}.
+    // Pre-process: New Char() {'x'} → New Char() {"x"c}  (valid VB char literal)
+    private static readonly Regex _vbFakeCharArray = new(
+        @"\bNew\s+Char\(\)\s*\{\s*'(.)'\s*\}",
+        RegexOptions.Compiled);
+
     private static readonly Regex _scriptBlock = new(
         @"(<script\b[^>]*\brunat\s*=\s*""server""[^>]*>)(.*?)(</script>)",
         RegexOptions.Singleline | RegexOptions.IgnoreCase | RegexOptions.Compiled);
@@ -48,6 +54,9 @@ public static class AsaxProcessor
 
     private static async Task<string> TranslateScriptBlockAsync(string vbBody, RoslynTranslator translator)
     {
+        // Fix VB 'comment-as-char-literal' pattern before ICSharpCode sees it
+        vbBody = _vbFakeCharArray.Replace(vbBody, @"New Char() {""$1""c}");
+
         // Wrap in minimal VB class so ICSharpCode can parse method declarations
         var vbWrapped = string.Join("\r\n",
             "Imports System",
