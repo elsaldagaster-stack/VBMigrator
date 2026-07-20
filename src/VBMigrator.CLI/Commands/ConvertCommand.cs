@@ -208,6 +208,43 @@ public static class ConvertCommandBuilder
             }
         }
 
+        // Process .asax files (global.asax inline VB script blocks)
+        var asaxTranslator = new RoslynTranslator();
+        foreach (var asaxFile in baseDir.GetFiles("*.asax", SearchOption.AllDirectories)
+            .Where(f => !f.FullName.StartsWith(backupPrefix, StringComparison.OrdinalIgnoreCase)))
+        {
+            try
+            {
+                var original  = await File.ReadAllTextAsync(asaxFile.FullName);
+                var processed = await AsaxProcessor.ProcessAsync(original, asaxTranslator);
+
+                if (processed == original)
+                {
+                    Console.Error.WriteLine($"ASAX: {asaxFile.Name} SKIP (no VB markers)");
+                    continue;
+                }
+
+                Console.Error.WriteLine($"ASAX: {asaxFile.Name} OK");
+
+                if (!dryRun)
+                {
+                    var outPath = output != null
+                        ? Path.Combine(output.FullName,
+                            Path.GetRelativePath(baseDir.FullName, asaxFile.FullName))
+                        : asaxFile.FullName;
+
+                    if (output != null)
+                        Directory.CreateDirectory(Path.GetDirectoryName(outPath)!);
+
+                    await File.WriteAllTextAsync(outPath, processed);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"ASAX: {asaxFile.Name} FAIL — {ex.Message}");
+            }
+        }
+
         // Process .aspx / .master / .ascx markup files
         var markupExts    = new[] { "*.aspx", "*.master", "*.ascx" };
         var markupFiles   = markupExts
